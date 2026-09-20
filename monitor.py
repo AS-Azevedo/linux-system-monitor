@@ -150,7 +150,7 @@ def get_cpu_temperature():
                         )
                         temperature = int(temp_file.read_text().strip()) / 1000.0
 
-                        return round(temperature, 2)
+                        return temperature
 
     except (OSError, ValueError):
         return None
