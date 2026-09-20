@@ -2,6 +2,7 @@
 import shutil
 import subprocess
 import time
+from pathlib import Path
 
 
 # ============================================================
@@ -130,6 +131,32 @@ def get_gpu_usage():
     ):
         return None
 
+def get_cpu_temperature():
+    """Read CPU temperature from hwmon."""
+
+    try:
+        hwmon_root = Path("/sys/class/hwmon")
+
+        for device in hwmon_root.glob("hwmon*"):
+            name = (device / "name").read_text().strip()
+
+            if name == "coretemp":
+                for label_file in device.glob("temp*_label"):
+                    label = label_file.read_text().strip()
+
+                    if label == "Package id 0":
+                        temp_file = label_file.with_name(
+                            label_file.name.replace("_label", "_input")
+                        )
+                        temperature = int(temp_file.read_text().strip()) / 1000.0
+
+                        return round(temperature, 2)
+
+    except (OSError, ValueError):
+        return None
+
+    return None
+
 
 # ============================================================
 # TERMINAL INTERFACE
@@ -155,7 +182,7 @@ def create_progress_bar(percentage, width=20):
 
     return f"{color}[{bar}]{reset} {percentage:.2f}%"
 
-def display_monitor(cpu, memory, disk, uptime, gpu):
+def display_monitor(cpu, memory, disk, uptime, gpu, cpu_temp):
     """Render the system monitor in the terminal."""
 
     memory_usage, memory_total, memory_available = memory
@@ -166,6 +193,7 @@ def display_monitor(cpu, memory, disk, uptime, gpu):
 
     label_width = 20
     panel_width = 55
+    
 
     # Clear the terminal and move the cursor to the top-left corner.
     print("\033[H\033[J", end="", flush=True)
@@ -179,6 +207,17 @@ def display_monitor(cpu, memory, disk, uptime, gpu):
         f"{'CPU:':<{label_width}}"
         f"{create_progress_bar(cpu)}"
     )
+
+    if cpu_temp is not None:
+        print(
+            f"{'CPU TEMP:':<{label_width}}"
+            f"{cpu_temp:.2f}°C"
+        )
+    else:
+        print(
+            f"{'CPU TEMP:':<{label_width}}"
+            "N/A"
+        )
 
     # RAM
     print(
@@ -280,6 +319,7 @@ def main():
             current_cpu = read_cpu_counters()
 
             cpu = get_cpu_usage(previous_cpu, current_cpu)
+            cpu_temp = get_cpu_temperature()
 
             previous_cpu = current_cpu
 
@@ -287,6 +327,7 @@ def main():
             disk = get_disk_usage()
             uptime = get_uptime()
             gpu = get_gpu_usage()
+            
 
             display_monitor(
                 cpu,
@@ -294,6 +335,7 @@ def main():
                 disk,
                 uptime,
                 gpu,
+                cpu_temp,
             )
 
     except KeyboardInterrupt:
